@@ -232,6 +232,11 @@ class Chat extends Base {
                     }
 
                     if (msgs.length > searchOptions.limit) {
+                        // Custom logic to fix album order (commented out)
+                        // msgs.sort((a, b) => {
+                        //     const getTrueT = (m) => (m.isMedia && !m.isForwarded && m.mediaKeyTimestamp && Math.abs(m.t - m.mediaKeyTimestamp) < 3600) ? m.mediaKeyTimestamp : m.t;
+                        //     return getTrueT(a) > getTrueT(b) ? 1 : -1;
+                        // });
                         msgs.sort((a, b) => (a.t > b.t ? 1 : -1));
                         msgs = msgs.splice(msgs.length - searchOptions.limit);
                     }

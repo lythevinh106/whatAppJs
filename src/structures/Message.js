@@ -32,6 +32,31 @@ class Message extends Base {
         this.mediaKey = data.mediaKey;
 
         /**
+         * Media key timestamp for the message
+         * @type {number}
+         */
+        this.mediaKeyTimestamp = data.mediaKeyTimestamp;
+
+        // Note: The following properties might be undefined/null depending on WhatsApp Web version
+        // and whether the message is a local or remote message. Do not rely on them unconditionally.
+        this.rowId = data.rowId;
+        this.sortId = data.sortId;
+        this.mediaGroupId = data.mediaGroupId;
+        this.albumGroupId = data.albumGroupId;
+        this.isAlbum = data.isAlbum;
+        this.msgChunk = data.msgChunk;
+
+        // Additional priority keys for advanced parsing
+        this.expectedImageCount = data.expectedImageCount;
+        this.expectedVideoCount = data.expectedVideoCount;
+        this.latestEditSenderTimestampMs = data.latestEditSenderTimestampMs;
+        this.stickerSentTs = data.stickerSentTs;
+        this.lastUpdateFromServerTs = data.lastUpdateFromServerTs;
+        this.isEventCanceled = data.isEventCanceled;
+        this.eventInvalidated = data.eventInvalidated;
+        this.parentMsgId = data.parentMsgId;
+
+        /**
          * ID that represents the message
          * @type {object}
          */
