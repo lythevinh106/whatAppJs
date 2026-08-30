@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="vi">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>WhatsApp JSON Log Viewer (Smart Clustering)</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background-color: #e5ddd5;
+                margin: 0;
+                padding: 20px;
+            }
+
+            .container {
+                max-width: 900px;
+                margin: 0 auto;
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+
+            .controls {
+                display: flex;
+                gap: 12px;
+                align-items: flex-end;
+                margin-bottom: 20px;
+                flex-wrap: wrap;
+                background: #f8f9fa;
+                padding: 14px;
+                border-radius: 6px;
+                border: 1px solid #e9ecef;
+            }
+
+            .control-group {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            .control-group label {
+                font-size: 0.82em;
+                font-weight: bold;
+                color: #495057;
+            }
+
+            select,
+            input[type='file'],
+            input[type='text'] {
+                padding: 7px 10px;
+                border-radius: 4px;
+                border: 1px solid #ced4da;
+                font-size: 0.9em;
+                outline: none;
+                background: white;
+            }
+
+            select:focus,
+            input[type='text']:focus {
+                border-color: #80bdff;
+                box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+            }
+
+            .message {
+                margin-bottom: 15px;
+                padding: 10px 14px;
+                border-radius: 8px;
+                max-width: 85%;
+                background-color: #fff;
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+                position: relative;
+            }
+
+            .message.from-me {
+                background-color: #dcf8c6;
+                margin-left: auto;
+            }
+
+            .message.from-others {
+                background-color: #ffffff;
+                margin-right: auto;
+            }
+
+            .sender {
+                font-size: 0.8em;
+                color: #128c7e;
+                font-weight: bold;
+                margin-bottom: 5px;
+            }
+
+            .time {
+                font-size: 0.72em;
+                color: #888;
+                text-align: right;
+                margin-top: 6px;
+                border-top: 1px dashed #eee;
+                padding-top: 4px;
+                word-break: break-all;
+            }
+
+            .image-preview {
+                max-width: 260px;
+                max-height: 260px;
+                border-radius: 5px;
+                border: 1px solid #ddd;
+                object-fit: cover;
+                cursor: pointer;
+            }
+
+            .image-preview:hover {
+                opacity: 0.95;
+            }
+
+            .meta-tag {
+                display: inline-block;
+                padding: 2px 6px;
+                border-radius: 4px;
+                font-size: 0.85em;
+                font-family: monospace;
+                margin-left: 4px;
+            }
+
+            .tag-rowid {
+                background: #e8f4fd;
+                color: #0d6efd;
+                border: 1px solid #b6d4fe;
+            }
+
+            .tag-mediats {
+                background: #fff3cd;
+                color: #856404;
+                border: 1px solid #ffeeba;
+            }
+
+            .tag-t {
+                background: #f8f9fa;
+                color: #495057;
+                border: 1px solid #dee2e6;
+            }
+
+            .stats-badge {
+                font-size: 0.85em;
+                color: #28a745;
+                font-weight: bold;
+                margin-left: auto;
+                align-self: center;
+            }
+
+            mark {
+                background-color: #ffe066;
+                padding: 1px 3px;
+                border-radius: 2px;
+                font-weight: bold;
+            }
+
+            .highlight-card {
+                border: 2px solid #fd7e14 !important;
+                background-color: #fff9db !important;
+            }
+
+            .lightbox-modal {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.8);
+                display: none;
+                justify-content: center;
+                align-items: center;
+                z-index: 10000;
+                cursor: pointer;
+            }
+
+            .lightbox-modal.show {
+                display: flex;
+            }
+
+            .lightbox-modal img {
+                max-width: 90vw;
+                max-height: 90vh;
+                border-radius: 6px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+                background: #000;
+            }
+
+            /* Edit Mode Styles */
+            .drag-handle {
+                display: none;
+                cursor: grab;
+                font-size: 20px;
+                padding: 0 10px;
+                color: #888;
+                margin-right: 10px;
+                user-select: none;
+            }
+
+            .edit-mode-active .drag-handle {
+                display: inline-block;
+            }
+
+            .edit-mode-active .message {
+                border: 2px dashed #007bff;
+            }
+
+            .edit-mode-active .image-preview {
+                pointer-events: none; /* Disable lightbox clicking while sorting */
+            }
+
+            .sortable-ghost {
+                opacity: 0.4;
+                background-color: #f0f8ff;
+            }
+        </style>
+        <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    </head>
+
+    <body>
+        <div class="container">
+            <h2>🧠 Trình Xem Log JSON (Smart Clustering)</h2>
+            <p style="color: #666; font-size: 0.9em; margin-top: -5px">
+                Tự động gom cụm ảnh bằng thuật toán cửa sổ trượt (120s) để chống
+                xen kẽ.
+            </p>
+
+            <div class="controls">
+                <div class="control-group">
+                    <label for="fileInput">📁 Chọn file JSON:</label>
+                    <input type="file" id="fileInput" accept=".json" />
+                </div>
+
+                <div class="control-group">
+                    <label for="senderSelect">👤 Lọc người gửi (Sender):</label>
+                    <select id="senderSelect">
+                        <option value="all">Tất cả người gửi</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label for="searchInput"
+                        >🔍 Tìm kiếm (Địa chỉ, text, ID):</label
+                    >
+                    <input
+                        type="text"
+                        id="searchInput"
+                        placeholder="Ví dụ: Wisma Geylang, Before, 107 Defu..."
+                    />
+                </div>
+
+                <div class="control-group">
+                    <label for="filterType">🏷️ Lọc loại tin:</label>
+                    <select id="filterType">
+                        <option value="all">Tất cả</option>
+                        <option value="chat">
+                            Chỉ tin nhắn văn bản (Text/Chat)
+                        </option>
+                        <option value="image">Chỉ hình ảnh (Image)</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label
+                        ><input type="checkbox" id="showAlbumToggle" /> 🗂️ Hiển
+                        thị loại 'album'</label
+                    >
+                </div>
+
+                <div class="control-group">
+                    <label for="sortSelect">🔀 Sắp xếp theo:</label>
+                    <select id="sortSelect">
+                        <option value="semantic">
+                            Mặc định (Thuật toán khe nứt thời gian - mediaTs
+                            Gap)
+                        </option>
+                        <option value="album_anchor">
+                            Thử nghiệm: Dùng Album làm neo (Gom nhóm & đẩy Text
+                            xuống)
+                        </option>
+                        <option value="mediaKeyTimestamp_asc">
+                            Sắp xếp theo mediaKeyTimestamp (Cũ -> Mới)
+                        </option>
+                    </select>
+                </div>
+
+                <div id="stats" class="stats-badge"></div>
+
+                <div
+                    class="control-group"
+                    style="flex-direction: row; gap: 8px"
+                >
+                    <button
+                        id="editBtn"
+                        style="
+                            padding: 8px 12px;
+                            background-color: #ffc107;
+                            color: #212529;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-weight: bold;
+                        "
+                    >
+                        ✏️ Bật Edit Mode
+                    </button>
+                    <button
+                        id="exportBtn"
+                        style="
+                            padding: 8px 12px;
+                            background-color: #28a745;
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-weight: bold;
+                        "
+                    >
+                        📥 Export JSON
+                    </button>
+                </div>
+            </div>
+
+            <div id="chatBox"></div>
+        </div>
+
+        <!-- Lightbox preview -->
+        <div
+            id="lightboxModal"
+            class="lightbox-modal"
+            onclick="closeLightbox()"
+        >
+            <img
+                id="lightboxImg"
+                src=""
+                alt="Full Preview"
+                onclick="event.stopPropagation()"
+            />
+        </div>
+
+        <script>
+            var rawMessages = [];
+            var currentRenderedMessages = [];
+
+            document.getElementById('fileInput').addEventListener('change', function (e) {
+                var file = e.target.files[0];
+                if (file) loadJsonFile(file);
+            });
+
+            window.addEventListener('dragover', function (e) { e.preventDefault(); });
+            window.addEventListener('drop', function (e) {
+                e.preventDefault();
+                if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+                    loadJsonFile(e.dataTransfer.files[0]);
+                }
+            });
+
+            function loadJsonFile(file) {
+                var reader = new FileReader();
+                reader.onload = function (e) {
+                    try {
+                        rawMessages = JSON.parse(e.target.result);
+                        if (!Array.isArray(rawMessages)) rawMessages = [rawMessages];
+
+                        populateSenderFilter();
+                        applySortAndRender();
+                    } catch (err) {
+                        alert("Lỗi đọc file JSON: " + err.message);
+                    }
+                };
+                reader.readAsText(file);
+            }
+
+            function populateSenderFilter() {
+                var senderSelect = document.getElementById('senderSelect');
+                var currentVal = senderSelect.value;
+                senderSelect.innerHTML = '<option value="all">Tất cả người gửi</option>';
+
+                var senderCounts = {};
+                rawMessages.forEach(m => {
+                    var s = getSenderId(m);
+                    senderCounts[s] = (senderCounts[s] || 0) + 1;
+                });
+
+                for (var s in senderCounts) {
+                    var opt = document.createElement('option');
+                    opt.value = s;
+                    opt.innerText = `${s} (${senderCounts[s]} tin)`;
+                    if (s === currentVal) opt.selected = true;
+                    senderSelect.appendChild(opt);
+                }
+            }
+
+            document.getElementById('senderSelect').addEventListener('change', applySortAndRender);
+            document.getElementById('filterType').addEventListener('change', applySortAndRender);
+            document.getElementById('searchInput').addEventListener('input', applySortAndRender);
+            document.getElementById('sortSelect').addEventListener('change', applySortAndRender);
+            document.getElementById('showAlbumToggle').addEventListener('change', applySortAndRender);
+
+            function getSenderId(m) {
+                if (!m) return "Unknown";
+                if (m.author) return m.author;
+                if (m.id && m.id._serialized && m.id._serialized.includes('@g.us')) {
+                    let parts = m.id._serialized.split('_');
+                    if (parts.length >= 4) return parts[3];
+                }
+                if (m.from) return m.from;
+                return "Unknown";
+            }
+
+            function highlightText(text, query) {
+                if (!query || !text) return text || '';
+                var regex = new RegExp(`(${query.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')})`, 'gi');
+                return String(text).replace(regex, '<mark>$1</mark>');
+            }
+
+            function applySortAndRender() {
+                if (!rawMessages || rawMessages.length === 0) return;
+
+                var selectedSender = document.getElementById('senderSelect').value;
+                var filterType = document.getElementById('filterType').value;
+                var searchQuery = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+                var showAlbum = document.getElementById('showAlbumToggle').checked;
+
+                var messages = rawMessages.filter(m => showAlbum || m.type !== 'album').map(m => {
+                    var clone = { ...m };
+                    if (clone.mediaKeyTimestamp == null && clone.t != null) {
+                        clone.mediaKeyTimestamp = clone.t;
+                        clone._isMediaTsFallback = true;
+                    }
+                    return clone;
+                });
+
+                // 1. Lọc theo Người gửi (Sender)
+                if (selectedSender && selectedSender !== 'all') {
+                    messages = messages.filter(m => getSenderId(m) === selectedSender);
+                }
+
+                // 2. Lọc theo Type
+                if (filterType === 'chat') {
+                    messages = messages.filter(m => m.type === 'chat');
+                } else if (filterType === 'image') {
+                    messages = messages.filter(m => m.type === 'image');
+                }
+
+                // 3. Lọc theo từ khóa tìm kiếm
+                if (searchQuery) {
+                    var matchedIndices = new Set();
+
+                    messages.forEach((m, idx) => {
+                        var body = (m.body || '').toLowerCase();
+                        var sender = getSenderId(m).toLowerCase();
+                        var rowId = (m.rowId || '').toLowerCase();
+                        var id = (m.id && m.id._serialized ? m.id._serialized : '').toLowerCase();
+
+                        if (body.includes(searchQuery) || sender.includes(searchQuery) || rowId.includes(searchQuery) || id.includes(searchQuery)) {
+                            matchedIndices.add(idx);
+
+                            if (m.type === 'chat') {
+                                var senderId = getSenderId(m);
+
+                                // Quét lùi để lấy ảnh Before
+                                for (var back = idx - 1; back >= 0 && (idx - back) <= 40; back--) {
+                                    if (getSenderId(messages[back]) !== senderId) break;
+                                    matchedIndices.add(back);
+                                    if (messages[back].type === 'chat' && (messages[back].body || '').trim().toLowerCase() === 'before') {
+                                        for (var b2 = back - 1; b2 >= 0 && (back - b2) <= 40; b2--) {
+                                            if (getSenderId(messages[b2]) !== senderId || messages[b2].type === 'chat') break;
+                                            matchedIndices.add(b2);
+                                        }
+                                        break;
+                                    }
+                                }
+
+                                // Quét tiến để lấy ảnh After
+                                for (var forward = idx + 1; forward < messages.length && (forward - idx) <= 40; forward++) {
+                                    if (getSenderId(messages[forward]) !== senderId) break;
+                                    matchedIndices.add(forward);
+                                    if (messages[forward].type === 'chat') break;
+                                }
+                            }
+                        }
+                    });
+
+                    messages = messages.filter((_, idx) => matchedIndices.has(idx));
+                }
+
+                var sortType = document.getElementById('sortSelect') ? document.getElementById('sortSelect').value : 'semantic';
+
+                // 4. THUẬT TOÁN GOM CỤM & SẮP XẾP
+                if (sortType === 'mediaKeyTimestamp_asc') {
+                    messages.sort((a, b) => {
+                        let valA = a.mediaKeyTimestamp || 0;
+                        let valB = b.mediaKeyTimestamp || 0;
+                        if (valA !== valB) return valA - valB;
+
+                        // Tie-breaker: ưu tiên media (không phải chat) lên trước
+                        let aIsChat = a.type === 'chat';
+                        let bIsChat = b.type === 'chat';
+                        if (!aIsChat && bIsChat) return -1;
+                        if (aIsChat && !bIsChat) return 1;
+
+                        // Tie-breaker 2: stable sort theo rowId
+                        let rowA = a.rowId ? BigInt(a.rowId) : 0n;
+                        let rowB = b.rowId ? BigInt(b.rowId) : 0n;
+                        return rowA < rowB ? -1 : rowA > rowB ? 1 : 0;
+                    });
+                } else {
+                    // SEMANTIC JOB SPLITTER
+                    // Bước 4.1: Sắp xếp gốc theo THỜI GIAN NHẬN (t) để tạo trục thời gian cơ sở
+                    messages.sort((a, b) => (a.t || 0) - (b.t || 0));
+
+                    var semanticMessages = [];
+                    var currentJob = [];
+
+                    function isSeparator(msg) {
+                        if (msg.type !== 'chat') return false;
+                        var b = (msg.body || '').toLowerCase();
+                        if (b.includes('before') || b.includes('b4') || b.includes('after') || b.includes('aft')) return false;
+                        return true;
+                    }
+
+                    function processJob(jobMsgs) {
+                        if (jobMsgs.length === 0) return;
+
+                        var texts = jobMsgs.filter(m => m.type === 'chat');
+                        var images = jobMsgs.filter(m => m.type === 'image');
+                        var others = jobMsgs.filter(m => m.type !== 'chat' && m.type !== 'image');
+
+                        var beforeTexts = texts.filter(m => {
+                            var b = (m.body || '').toLowerCase();
+                            return b.includes('before') || b.includes('b4');
+                        });
+
+                        var afterTexts = texts.filter(m => {
+                            var b = (m.body || '').toLowerCase();
+                            return b.includes('after') || b.includes('aft');
+                        });
+
+                        var locationTexts = texts.filter(isSeparator);
+
+                        var beforeImages = [];
+                        var afterImages = [];
+
+                        if (images.length > 0) {
+                            var maxGap = -1;
+                            var splitIndex = images.length;
+
+                            for (var i = 1; i < images.length; i++) {
+                                var ts1 = images[i-1].mediaKeyTimestamp || images[i-1].t || 0;
+                                var ts2 = images[i].mediaKeyTimestamp || images[i].t || 0;
+                                var gap = ts2 - ts1; // Nếu tụt lùi (âm) sẽ bị bỏ qua, chỉ bắt khe hở tiến lớn nhất
+                                if (gap > maxGap) {
+                                    maxGap = gap;
+                                    splitIndex = i;
+                                }
+                            }
+
+                            // Nếu khoảng thời gian nghỉ quá bé (nhỏ hơn 60s), chứng tỏ gửi chung 1 đợt
+                            if (maxGap < 60) {
+                                splitIndex = images.length; // Mặc định ném hết vào Before để render lên đầu
+                            }
+
+                            beforeImages = images.slice(0, splitIndex);
+                            afterImages = images.slice(splitIndex);
+                        }
+
+                        // Lắp ráp lại theo công thức: [BeforeImages] -> [B4] -> [AfterImages] -> [After] -> [Location]
+                        semanticMessages.push(...beforeImages);
+                        semanticMessages.push(...beforeTexts);
+                        semanticMessages.push(...afterImages);
+                        semanticMessages.push(...afterTexts);
+                        semanticMessages.push(...locationTexts);
+                        semanticMessages.push(...others);
+                    }
+
+                    for (var i = 0; i < messages.length; i++) {
+                        var msg = messages[i];
+                        currentJob.push(msg);
+
+                        // Cắt Job khi gặp Location Text hoặc chuyển Sender
+                        if (isSeparator(msg)) {
+                            processJob(currentJob);
+                            currentJob = [];
+                        } else if (i < messages.length - 1 && getSenderId(msg) !== getSenderId(messages[i+1])) {
+                            processJob(currentJob);
+                            currentJob = [];
+                        }
+                    }
+
+                    // Xử lý nốt Job cuối nếu chưa đóng
+                    if (currentJob.length > 0) {
+                        processJob(currentJob);
+                    }
+
+                    messages = semanticMessages;
+                } else if (sortType === 'album_anchor') {
+                    var newMessages = [];
+                    var i = 0;
+                    while (i < messages.length) {
+                        var msg = messages[i];
+                        if (msg.type === 'album') {
+                            var groupImages = [];
+                            var groupTexts = [];
+                            var groupAlbum = msg;
+                            i++;
+
+                            var hasSeenBefore = false;
+
+                            while (i < messages.length) {
+                                var m = messages[i];
+                                var body = (m.body || '').toLowerCase();
+                                var isBefore = m.type === 'chat' && (body.includes('before') || body.includes('b4'));
+                                var isAfter = m.type === 'chat' && (body.includes('after') || body.includes('aft'));
+                                var isLoc = m.type === 'chat' && !isBefore && !isAfter;
+
+                                if (m.type === 'album') break; // Dừng khi gặp Album khác
+                                if (isLoc) break; // Dừng khi gặp Text địa chỉ
+
+                                if (isAfter) {
+                                    // Nếu đã gặp B4 trước đó, thì chữ After này là ranh giới của nhóm tiếp theo -> Dừng
+                                    // Nếu chưa gặp B4, thì đây chính là nhóm After -> KHÔNG dừng, gom luôn để đẩy xuống đáy
+                                    if (hasSeenBefore) break;
+                                }
+
+                                if (isBefore) hasSeenBefore = true;
+
+                                if (m.type === 'image') {
+                                    groupImages.push(m);
+                                } else {
+                                    groupTexts.push(m);
+                                }
+                                i++;
+                            }
+
+                            newMessages.push(groupAlbum);
+                            newMessages.push(...groupImages);
+                            newMessages.push(...groupTexts); // Đẩy toàn bộ text (B4/After) xuống dưới cùng của nhóm ảnh
+                        } else {
+                            newMessages.push(msg);
+                            i++;
+                        }
+                    }
+                    messages = newMessages;
+                }
+
+                currentRenderedMessages = messages;
+
+                document.getElementById('stats').innerText = `Hiển thị: ${messages.length} / ${rawMessages.length} tin`;
+                renderChat(messages, searchQuery);
+            }
+
+            function renderChat(messages, searchQuery) {
+                var chatBox = document.getElementById('chatBox');
+                chatBox.innerHTML = '';
+
+                var imageCount = 0;
+                var lastSender = null;
+
+                messages.forEach((msg, idx) => {
+                    var div = document.createElement('div');
+
+                    // Format time
+                    var date = new Date((msg.t || 0) * 1000);
+                    var timeStr = date.toLocaleString();
+                    var senderId = getSenderId(msg);
+
+                    // Logic đếm ảnh liên tiếp của cùng 1 sender
+                    if (msg.type !== 'image' || senderId !== lastSender) {
+                        imageCount = 0;
+                    }
+                    if (msg.type === 'image') {
+                        imageCount++;
+                    }
+                    lastSender = senderId;
+
+                    var isMatched = searchQuery && (
+                        (msg.body && msg.body.toLowerCase().includes(searchQuery)) ||
+                        (msg.rowId && msg.rowId.toLowerCase().includes(searchQuery))
+                    );
+
+                    div.className = 'message ' + (msg.fromMe ? 'from-me' : 'from-others') + (isMatched ? ' highlight-card' : '');
+                    div.setAttribute('data-index', idx);
+
+                    var contentHTML = `<div style="display:flex; align-items:flex-start;">
+                        <div class="drag-handle" title="Kéo thả để sắp xếp">☰</div>
+                        <div style="flex: 1; min-width: 0;">
+                            <div class="sender">${senderId}</div>`;
+
+                    if (msg.type === 'chat') {
+                        var displayBody = highlightText(msg.body, searchQuery);
+                        contentHTML += `<div style="white-space: pre-wrap; font-size: 0.95em; line-height: 1.4;">${displayBody}</div>`;
+                    } else if (msg.type === 'image') {
+                        var base64 = msg.body;
+                        var sttBadge = `<span style="display:inline-block; min-width: 24px; height: 24px; background: #007bff; color: white; border-radius: 12px; text-align: center; line-height: 24px; font-size: 12px; font-weight: bold; margin-right: 10px; vertical-align: top; padding: 0 4px;">#${imageCount}</span>`;
+
+                        if (base64) {
+                            var imgSrc = `data:image/jpeg;base64,${base64}`;
+                            contentHTML += `<div style="display: flex; align-items: flex-start;">${sttBadge}<img src="${imgSrc}" class="image-preview" title="Nhấp để xem to" onclick="openLightbox('${imgSrc}')"></div>`;
+                        } else {
+                            contentHTML += `<div>${sttBadge}<i>(Hình ảnh - Không có thumbnail)</i></div>`;
+                        }
+                    } else if (msg.type === 'album') {
+                        contentHTML += `<div style="font-weight: bold; color: #005c4b; font-size: 0.9em;">📸 [Album Tin Nhắn]</div>`;
+                        if (msg.albumId) {
+                            contentHTML += `<div style="font-size: 0.8em; color: blue; font-weight: bold; margin-top: 5px;">Album ID: ${msg.albumId}</div>`;
+                        }
+                    } else {
+                        contentHTML += `<div><i>(Tin nhắn loại: ${msg.type})</i></div>`;
+                    }
+
+                    if (msg.albumId) {
+                        contentHTML += `<div style="font-size: 0.8em; color: blue; font-weight: bold; margin-top: 5px;">Album ID: ${msg.albumId}</div>`;
+                    }
+
+                    // Tags for comparison
+                    var tDateStr = msg.t ? new Date(msg.t * 1000).toLocaleTimeString() : '-';
+                    var tagsHTML = `<span class="meta-tag tag-t" title="Message Timestamp (t)">t: ${msg.t || '-'} (${tDateStr})</span>`;
+                    if (msg.rowId) {
+                        tagsHTML += `<span class="meta-tag tag-rowid" title="Local Database Row ID">rowId: ${msg.rowId}</span>`;
+                    }
+                    if (msg.mediaKeyTimestamp && !msg._isMediaTsFallback) {
+                        var mediaDate = new Date(msg.mediaKeyTimestamp * 1000).toLocaleTimeString();
+                        var diffSeconds = (msg.t && msg.mediaKeyTimestamp) ? (msg.t - msg.mediaKeyTimestamp) : 0;
+                        tagsHTML += `<span class="meta-tag tag-mediats" title="Media Key Timestamp (Diff with t: -${diffSeconds}s)">mediaTs: ${msg.mediaKeyTimestamp} (${mediaDate}, -${diffSeconds}s)</span>`;
+                    }
+
+                    contentHTML += `<div class="time">
+                        <div style="margin-bottom: 3px;">${tagsHTML}</div>
+                        <div>🕒 ${timeStr} | ID: ${msg.id ? msg.id._serialized : ''}</div>
+                    </div></div></div>`;
+
+                    div.innerHTML = contentHTML;
+                    chatBox.appendChild(div);
+                });
+            }
+
+            function openLightbox(src) {
+                var modal = document.getElementById('lightboxModal');
+                var img = document.getElementById('lightboxImg');
+                img.src = src;
+                modal.classList.add('show');
+            }
+
+            function closeLightbox() {
+                document.getElementById('lightboxModal').classList.remove('show');
+            }
+
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') closeLightbox();
+            });
+
+            // Chức năng Edit Mode & Kéo thả
+            var isEditMode = false;
+            var sortableInstance = null;
+
+            document.getElementById('editBtn').addEventListener('click', function () {
+                isEditMode = !isEditMode;
+                var chatBox = document.getElementById('chatBox');
+
+                // Toggle filters to prevent layout thrashing and losing sort orders
+                document.getElementById('senderSelect').disabled = isEditMode;
+                document.getElementById('filterType').disabled = isEditMode;
+                document.getElementById('searchInput').disabled = isEditMode;
+                if (document.getElementById('sortSelect')) {
+                    document.getElementById('sortSelect').disabled = isEditMode;
+                }
+
+                if (isEditMode) {
+                    this.innerText = '✅ Lưu Edit Mode';
+                    this.style.backgroundColor = '#17a2b8';
+                    this.style.color = 'white';
+                    document.body.classList.add('edit-mode-active');
+
+                    // Khởi tạo Sortable
+                    sortableInstance = new Sortable(chatBox, {
+                        handle: '.drag-handle',
+                        animation: 150,
+                        ghostClass: 'sortable-ghost',
+                        onEnd: function (evt) {
+                            var oldIndex = evt.oldIndex;
+                            var newIndex = evt.newIndex;
+
+                            // Cập nhật lại mảng dữ liệu RAM (để export chuẩn)
+                            var movedItem = currentRenderedMessages.splice(oldIndex, 1)[0];
+                            currentRenderedMessages.splice(newIndex, 0, movedItem);
+
+                            // Cập nhật lại thuộc tính data-index trên DOM để nhất quán với mảng
+                            var children = chatBox.children;
+                            for (var i = 0; i < children.length; i++) {
+                                children[i].setAttribute('data-index', i);
+                            }
+                        }
+                    });
+                } else {
+                    this.innerText = '✏️ Bật Edit Mode';
+                    this.style.backgroundColor = '#ffc107';
+                    this.style.color = '#212529';
+                    document.body.classList.remove('edit-mode-active');
+
+                    if (sortableInstance) {
+                        sortableInstance.destroy();
+                        sortableInstance = null;
+                    }
+                }
+            });
+
+            // Chức năng Export JSON
+            document.getElementById('exportBtn').addEventListener('click', function () {
+                if (!currentRenderedMessages || currentRenderedMessages.length === 0) {
+                    alert("Không có dữ liệu để export!");
+                    return;
+                }
+                var dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentRenderedMessages, null, 2));
+                var downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr);
+                downloadAnchorNode.setAttribute("download", "sorted_messages.json");
+                document.body.appendChild(downloadAnchorNode);
+                downloadAnchorNode.click();
+                downloadAnchorNode.remove();
+            });
+        </script>
+    </body>
+</html>
